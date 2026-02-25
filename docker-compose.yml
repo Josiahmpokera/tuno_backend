@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: tuno_api
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=8080
+      - ENV=development
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_SSL_MODE=disable
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DB=${REDIS_DB}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - tuno_network
+    restart: always
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: tuno_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - tuno_network
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: tuno_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - tuno_network
+    restart: always
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  tuno_network:
+    driver: bridge
