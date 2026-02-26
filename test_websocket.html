@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tuno WebSocket Tester</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .container { display: flex; flex-direction: column; gap: 10px; }
+        #log { height: 300px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; background: #f9f9f9; }
+        .message { margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .sent { color: blue; }
+        .received { color: green; }
+        .error { color: red; }
+        .controls { display: flex; gap: 10px; margin-bottom: 10px; }
+        input, button { padding: 8px; }
+    </style>
+</head>
+<body>
+    <h1>Tuno WebSocket Tester</h1>
+    
+    <div class="container">
+        <div class="controls">
+            <input type="text" id="token" placeholder="Paste JWT Token here" style="flex-grow: 1;">
+            <button onclick="connect()">Connect</button>
+            <button onclick="disconnect()">Disconnect</button>
+        </div>
+
+        <div class="controls">
+            <input type="text" id="groupId" placeholder="Group ID" style="width: 300px;">
+            <input type="text" id="messageInput" placeholder="Message content" style="flex-grow: 1;">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let ws;
+
+        function log(msg, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `message ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function connect() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                log('Error: Token is required', 'error');
+                return;
+            }
+
+            // Close existing connection if any
+            if (ws) ws.close();
+
+            const url = `ws://localhost:8080/api/v1/ws?token=${token}`;
+            log(`Connecting to ${url}...`);
+
+            try {
+                ws = new WebSocket(url);
+
+                ws.onopen = () => {
+                    log('Connected!', 'received');
+                };
+
+                ws.onmessage = (event) => {
+                    log(`Received: ${event.data}`, 'received');
+                };
+
+                ws.onclose = (event) => {
+                    log(`Disconnected (Code: ${event.code}, Reason: ${event.reason})`, 'error');
+                };
+
+                ws.onerror = (error) => {
+                    log('WebSocket Error', 'error');
+                    console.error('WebSocket Error:', error);
+                };
+            } catch (e) {
+                log(`Connection failed: ${e.message}`, 'error');
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                log('Disconnected by user');
+            }
+        }
+
+        function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('Error: Not connected', 'error');
+                return;
+            }
+
+            const groupId = document.getElementById('groupId').value;
+            const content = document.getElementById('messageInput').value;
+
+            if (!groupId || !content) {
+                log('Error: Group ID and Content are required', 'error');
+                return;
+            }
+
+            const payload = {
+                group_id: groupId,
+                content: content,
+                type: "TEXT"
+            };
+
+            ws.send(JSON.stringify(payload));
+            log(`Sent: ${JSON.stringify(payload)}`, 'sent');
+        }
+    </script>
+</body>
+</html>

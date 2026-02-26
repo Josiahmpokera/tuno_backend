@@ -27,10 +27,14 @@ func (b *CommandBus) Register(commandName string, handler CommandHandlerFunc) {
 	b.handlers[commandName] = handler
 }
 
-func (b *CommandBus) Dispatch(ctx context.Context, cmd Command) (interface{}, error) {
-	handler, ok := b.handlers[cmd.CommandName()]
+func (b *CommandBus) Dispatch(ctx context.Context, cmd interface{}) (interface{}, error) {
+	command, ok := cmd.(Command)
 	if !ok {
-		return nil, fmt.Errorf("no handler registered for command: %s", cmd.CommandName())
+		return nil, fmt.Errorf("invalid command type")
+	}
+	handler, ok := b.handlers[command.CommandName()]
+	if !ok {
+		return nil, fmt.Errorf("no handler registered for command: %s", command.CommandName())
 	}
 	return handler(ctx, cmd)
 }

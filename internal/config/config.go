@@ -11,11 +11,16 @@ type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
 	Redis    RedisConfig
+	JWT      JWTConfig
 }
 
 type ServerConfig struct {
 	Port string
 	Env  string
+}
+
+type JWTConfig struct {
+	Secret string
 }
 
 type DatabaseConfig struct {
@@ -58,6 +63,9 @@ func Load() (*Config, error) {
 			Addr:     getEnv("REDIS_ADDR", "localhost:6379"),
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       redisDB,
+		},
+		JWT: JWTConfig{
+			Secret: getEnv("JWT_SECRET", "supersecretkey"),
 		},
 	}, nil
 }

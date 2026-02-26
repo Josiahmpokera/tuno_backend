@@ -2,14 +2,16 @@
 
 All API endpoints are prefixed with `/api/v1`.
 
-## Authentication Endpoints
+## Authentication Flow (WhatsApp Style)
 
-The authentication flow requires phone number verification via OTP.
+The authentication flow mimics WhatsApp's behavior:
+1.  **Request OTP**: User enters phone number. System sends OTP.
+2.  **Verify OTP**: User enters OTP. System verifies.
+    *   If user exists: Logs in.
+    *   If user is new: Creates a placeholder account and logs in.
+3.  **Profile Setup**: If the user is new, the client prompts for Name/Photo and updates the profile.
 
-**Typical Flow:**
-1.  **Request OTP**: Send POST request to `/api/v1/auth/otp` with the phone number.
-2.  **Receive OTP**: For development, the OTP is returned in the response. In production, it would be sent via SMS/WhatsApp.
-3.  **Register/Login**: Use the phone number and the received OTP to register or login.
+---
 
 ### 1. Request OTP
 
@@ -41,55 +43,11 @@ Request an OTP for a phone number.
 
 ---
 
-### 2. Register User
+### 2. Verify OTP (Login / Register)
 
-Register a new user with their phone number, OTP, name, and optional photo URL.
+Verify the OTP. This endpoint handles both registration and login.
 
-- **URL**: `/api/v1/auth/register`
-- **Method**: `POST`
-- **Content-Type**: `application/json`
-
-**Request Body:**
-
-```json
-{
-  "phone_number": "+254700000001",
-  "name": "Josi Ampokera",
-  "photo_url": "https://example.com/photo.jpg",
-  "otp": "123456"
-}
-```
-
-- `phone_number` (string, required): The user's phone number.
-- `name` (string, required): The user's full name.
-- `photo_url` (string, optional): URL to the user's profile photo.
-- `otp` (string, required): The 6-digit OTP received from `/api/v1/auth/otp`.
-
-**Success Response:**
-
-- **Code**: `201 Created`
-- **Content**:
-
-```json
-{
-  "user_id": "b63be9e5-0cf0-402d-be9d-e29421e5938c",
-  "token": "mock-jwt-token-..."
-}
-```
-
-**Error Responses:**
-
-- **Code**: `400 Bad Request`
-  - Content: `{"error": "OTP verification failed: invalid OTP"}`
-  - Content: `{"error": "user with phone number ... already exists"}`
-
----
-
-### 3. Login User
-
-Login an existing user using their phone number and OTP.
-
-- **URL**: `/api/v1/auth/login`
+- **URL**: `/api/v1/auth/verify`
 - **Method**: `POST`
 - **Content-Type**: `application/json`
 
@@ -101,9 +59,6 @@ Login an existing user using their phone number and OTP.
   "otp": "123456"
 }
 ```
-
-- `phone_number` (string, required): The user's phone number.
-- `otp` (string, required): The 6-digit OTP received from `/api/v1/auth/otp`.
 
 **Success Response:**
 
@@ -113,16 +68,103 @@ Login an existing user using their phone number and OTP.
 ```json
 {
   "user_id": "b63be9e5-0cf0-402d-be9d-e29421e5938c",
-  "token": "mock-jwt-token-..."
+  "token": "mock-jwt-token-...",
+  "is_new_user": true, // true if user was just created, false if existing
+  "user": {
+      "id": "...",
+      "phone_number": "...",
+      "name": "", // Empty if new user
+      "photo_url": ""
+  }
 }
 ```
 
-**Error Responses:**
+**Client Logic:**
+- If `is_new_user` is `true`, navigate to **Profile Setup** screen.
+- If `is_new_user` is `false`, navigate to **Home** screen.
 
-- **Code**: `400 Bad Request`
-  - Content: `{"error": "OTP verification failed: invalid OTP"}`
-- **Code**: `401 Unauthorized` (or 400 currently)
-  - Content: `{"error": "user not found"}`
+---
+
+## User Endpoints
+
+### 3. Update Profile
+
+Update the user's name and photo URL. Typically called after registration or from settings.
+
+- **URL**: `/api/v1/users/profile`
+- **Method**: `PUT`
+- **Content-Type**: `application/json`
+
+**Request Body:**
+
+```json
+{
+  "user_id": "b63be9e5-0cf0-402d-be9d-e29421e5938c", // TODO: Will be removed once JWT middleware is active
+  "name": "Josi Ampokera",
+  "photo_url": "https://example.com/photo.jpg"
+}
+```
+
+**Success Response:**
+
+- **Code**: `200 OK`
+- **Content**:
+
+```json
+{
+  "id": "b63be9e5-0cf0-402d-be9d-e29421e5938c",
+  "phone_number": "+254700000001",
+  "name": "Josi Ampokera",
+  "photo_url": "https://example.com/photo.jpg",
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+---
+
+## Group Endpoints
+
+### 4. Create Group
+
+Create a new rotational savings group and invite users.
+
+- **URL**: `/api/v1/groups/`
+- **Method**: `POST`
+- **Content-Type**: `application/json`
+- **Headers**:
+    - `X-User-ID`: `{user_id}` (Required for now until JWT middleware is fully integrated)
+
+**Request Body:**
+
+```json
+{
+  "name": "Family Savings",
+  "photo_url": "https://example.com/group.jpg",
+  "contribution_amount": 1000.00,
+  "rotation_frequency": "WEEKLY", // Options: EVERY_DAY, EVERY_2_DAYS, EVERY_3_DAYS, WEEKLY, MONTHLY, CUSTOM
+  "custom_frequency_days": 0, // Only if rotation_frequency is CUSTOM
+  "invitees": ["+254700000002", "+254700000003"] // List of phone numbers to invite
+}
+```
+
+**Success Response:**
+
+- **Code**: `201 Created`
+- **Content**:
+
+```json
+{
+  "group_id": "c1ab7ab6-2496-453f-aa5b-34ec6409eefa",
+  "invite_link": "https://tuno.app/join/abcdef12",
+  "invited_count": 2,
+  "invited_users": ["+254700000002", "+254700000003"],
+  "failed_invitees": [],
+  "message": "Group created successfully"
+}
+```
+
+---
 
 ## Other Endpoints
 
@@ -130,22 +172,16 @@ Login an existing user using their phone number and OTP.
 
 - **URL**: `/api/v1/`
 - **Method**: `GET`
-- **Description**: Returns project title and description.
+- **Description**: Returns API version and info.
 
 ### Health Check
 
 - **URL**: `/api/v1/health`
 - **Method**: `GET`
-- **Description**: Returns health status of the service.
+- **Description**: Returns system health status.
 
 ### WebSocket
 
 - **URL**: `/api/v1/ws`
 - **Method**: `GET`
-- **Description**: WebSocket connection endpoint.
-
-## Notes
-
-- **OTP Validity**: OTPs are valid for 5 minutes.
-- **One-Time Use**: Once an OTP is verified successfully (for register or login), it is invalidated and cannot be used again.
-- **Tokens**: The API currently returns a mock token. This will be replaced by a real JWT implementation in future updates.
+- **Description**: WebSocket endpoint for real-time communication.

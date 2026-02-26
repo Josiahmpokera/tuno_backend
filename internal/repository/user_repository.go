@@ -36,6 +36,24 @@ func (r *PostgresUserRepository) Create(user *domain.User) error {
 	return nil
 }
 
+func (r *PostgresUserRepository) Update(user *domain.User) error {
+	query := `
+		UPDATE users
+		SET name = $1, photo_url = $2, updated_at = $3
+		WHERE id = $4
+	`
+	_, err := r.pool.Exec(context.Background(), query,
+		user.Name,
+		user.PhotoURL,
+		user.UpdatedAt,
+		user.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	return nil
+}
+
 func (r *PostgresUserRepository) FindByPhoneNumber(phoneNumber string) (*domain.User, error) {
 	query := `
 		SELECT id, phone_number, name, photo_url, created_at, updated_at

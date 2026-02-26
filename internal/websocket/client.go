@@ -1,15 +1,35 @@
 package websocket
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
+	"tuno_backend/internal/domain"
 	"tuno_backend/pkg/logger"
 
-	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
+
+type IncomingMessage struct {
+	GroupID string `json:"group_id"`
+	Content string `json:"content"`
+	Type    string `json:"type"`
+}
+
+type SendMessageCommand struct {
+	UserID  string
+	GroupID string
+	Content string
+	Type    domain.MessageType
+}
+
+type SendMessageResult struct {
+	Message   interface{}
+	MemberIDs []string
+}
 
 const (
 	// Time allowed to write a message to the peer.
@@ -41,8 +61,18 @@ type Client struct {
 	// The websocket connection.
 	conn *websocket.Conn
 
+	// User ID
+	UserID string
+
+	// Command Bus
+	commandBus CommandBus
+
 	// Buffered channel of outbound messages.
 	send chan []byte
+}
+
+type CommandBus interface {
+	Dispatch(ctx context.Context, cmd interface{}) (interface{}, error)
 }
 
 // readPump pumps messages from the websocket connection to the hub.
@@ -66,9 +96,50 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		// In a real application, we would decode the message (Protobuf) here
-		// and perform business logic validation or persistence.
-		c.hub.broadcast <- message
+
+		// Parse incoming message
+		var incomingMsg IncomingMessage
+		if err := json.Unmarshal(message, &incomingMsg); err != nil {
+			logger.Error("Failed to parse incoming message", zap.Error(err))
+			continue
+		}
+
+		// Create Command
+		cmd := SendMessageCommand{
+			UserID:  c.UserID,
+			GroupID: incomingMsg.GroupID,
+			Content: incomingMsg.Content,
+			Type:    domain.MessageType(incomingMsg.Type),
+		}
+
+		// Dispatch Command
+		// Use a timeout context
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		result, err := c.commandBus.Dispatch(ctx, cmd)
+		cancel()
+
+		if err != nil {
+			logger.Error("Failed to dispatch send message command", zap.Error(err))
+			// TODO: Send error back to client?
+			continue
+		}
+
+		// Broadcast Result
+		sendResult, ok := result.(SendMessageResult)
+		if !ok {
+			logger.Error("Command result is not SendMessageResult")
+			continue
+		}
+
+		// Serialize Message
+		msgBytes, err := json.Marshal(sendResult.Message)
+		if err != nil {
+			logger.Error("Failed to marshal message", zap.Error(err))
+			continue
+		}
+
+		// Fan-out via Hub
+		c.hub.BroadcastToUsers(sendResult.MemberIDs, msgBytes)
 	}
 }
 
@@ -118,13 +189,13 @@ func (c *Client) writePump() {
 }
 
 // ServeWs handles websocket requests from the peer.
-func ServeWs(hub *Hub, c *gin.Context) {
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, userID string, commandBus CommandBus) {
+	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		logger.Error("Failed to upgrade websocket", zap.Error(err))
 		return
 	}
-	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256)}
+	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256), UserID: userID, commandBus: commandBus}
 	client.hub.register <- client
 
 	// Allow collection of memory referenced by the caller by doing all work in

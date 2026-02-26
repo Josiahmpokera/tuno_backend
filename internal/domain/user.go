@@ -15,6 +15,7 @@ type User struct {
 
 type UserRepository interface {
 	Create(user *User) error
+	Update(user *User) error
 	FindByPhoneNumber(phoneNumber string) (*User, error)
 	FindByID(id string) (*User, error)
 }

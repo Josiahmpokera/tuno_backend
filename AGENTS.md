@@ -6,20 +6,14 @@
 - Follow Meta standart please
 - Maintain the code versioning please
 - Save the project for me please, Every changes Save it
+- Before implementing changes, present a brief plan (steps + files) and wait for explicit user confirmation to continue or stop. For bugs, first explain the bug, its cause, and the intended fix, then wait for explicit user confirmation to continue or stop.
+
+- Event-driven architecture
+- WhatsApp-style behavior
+- Financial correctness
+- Long-term scalability
 
 
-# Trae Endpoint Writing Rules
-
-**Project:** Rotational Group Savings & Messaging Platform (Upatu)
-
-This document defines **mandatory rules** Cursor must follow when implementing API endpoints.
-
-These rules exist to enforce:
-
-* Event-driven architecture
-* WhatsApp-style behavior
-* Financial correctness
-* Long-term scalability
 
 ---
 
