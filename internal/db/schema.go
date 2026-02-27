@@ -90,6 +90,8 @@ func InitSchema(pool *pgxpool.Pool) error {
 		`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_id UUID REFERENCES users(id);`, // Ensure sender_id exists and has correct reference
 		`ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS sequence_number BIGINT DEFAULT 0;`,
 		`ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'SENT';`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT FALSE;`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`,
 	}
 
 	for _, query := range alterQueries {

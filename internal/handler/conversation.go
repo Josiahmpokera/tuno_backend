@@ -127,3 +127,40 @@ func (h *ConversationHandler) GetMessages(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"messages": messages})
 }
+
+type MarkMessagesReadRequest struct {
+	CommandID string `json:"command_id" binding:"required"`
+}
+
+func (h *ConversationHandler) MarkMessagesRead(c *gin.Context) {
+	userID := c.GetString("user_id")
+	convID := c.Param("id")
+
+	// Ideally this should be a command via CommandBus for consistency/auditing,
+	// but for simplicity of this phase, direct repo call.
+	// However, user asked to follow the rules. Let's create a command later if needed.
+	// For now, direct repo call is faster to implement Phase 2.
+	// WAIT. Rule: "Endpoint = Command Intake".
+	// I should create a MarkReadCommand.
+
+	// Let's implement the Command pattern.
+	var req MarkMessagesReadRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	cmd := service.MarkMessagesReadCommand{
+		CommandID:      req.CommandID,
+		UserID:         userID,
+		ConversationID: convID,
+	}
+
+	_, err := h.bus.Dispatch(c.Request.Context(), cmd)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Messages marked as read"})
+}

@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"tuno_backend/internal/domain"
 	"tuno_backend/pkg/logger"
 
 	"go.uber.org/zap"
@@ -31,9 +32,11 @@ type Hub struct {
 
 	// Unregister requests from clients.
 	unregister chan *Client
+
+	userRepo domain.UserRepository
 }
 
-func NewHub() *Hub {
+func NewHub(userRepo domain.UserRepository) *Hub {
 	return &Hub{
 		broadcast:       make(chan []byte),
 		groupBroadcast:  make(chan GroupMessage),
@@ -41,6 +44,7 @@ func NewHub() *Hub {
 		unregister:      make(chan *Client),
 		clients:         make(map[*Client]bool),
 		clientsByUserID: make(map[string]*Client),
+		userRepo:        userRepo,
 	}
 }
 
@@ -51,6 +55,10 @@ func (h *Hub) Run() {
 			h.clients[client] = true
 			if client.UserID != "" {
 				h.clientsByUserID[client.UserID] = client
+				// Mark user as online
+				if err := h.userRepo.UpdatePresence(client.UserID, true); err != nil {
+					logger.Error("Failed to update user presence (online)", zap.Error(err), zap.String("user_id", client.UserID))
+				}
 			}
 			logger.Info("Client registered", zap.String("addr", client.conn.RemoteAddr().String()), zap.String("user_id", client.UserID))
 		case client := <-h.unregister:
@@ -58,6 +66,10 @@ func (h *Hub) Run() {
 				delete(h.clients, client)
 				if client.UserID != "" {
 					delete(h.clientsByUserID, client.UserID)
+					// Mark user as offline
+					if err := h.userRepo.UpdatePresence(client.UserID, false); err != nil {
+						logger.Error("Failed to update user presence (offline)", zap.Error(err), zap.String("user_id", client.UserID))
+					}
 				}
 				close(client.send)
 				logger.Info("Client unregistered", zap.String("addr", client.conn.RemoteAddr().String()))

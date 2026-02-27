@@ -199,3 +199,31 @@ func (r *PostgresDirectMessageRepository) GetByConversationID(conversationID str
 	}
 	return messages, nil
 }
+
+func (r *PostgresDirectMessageRepository) UpdateStatus(messageID string, status string) error {
+	query := `
+		UPDATE direct_messages
+		SET status = $1
+		WHERE id = $2
+	`
+	_, err := r.pool.Exec(context.Background(), query, status, messageID)
+	if err != nil {
+		return fmt.Errorf("failed to update direct message status: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresDirectMessageRepository) MarkMessagesAsRead(conversationID, userID string) error {
+	// Mark all messages in this conversation NOT sent by userID as READ
+	// where current status is not READ.
+	query := `
+		UPDATE direct_messages
+		SET status = 'READ'
+		WHERE conversation_id = $1 AND sender_id != $2 AND status != 'READ'
+	`
+	_, err := r.pool.Exec(context.Background(), query, conversationID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to mark messages as read: %w", err)
+	}
+	return nil
+}

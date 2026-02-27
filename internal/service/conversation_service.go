@@ -34,6 +34,16 @@ func (c SendDirectMessageCommand) CommandName() string {
 	return "SendDirectMessage"
 }
 
+type MarkMessagesReadCommand struct {
+	CommandID      string
+	UserID         string
+	ConversationID string
+}
+
+func (c MarkMessagesReadCommand) CommandName() string {
+	return "MarkMessagesRead"
+}
+
 // --- Events ---
 
 type ConversationStartedEvent struct {
@@ -59,6 +69,17 @@ type DirectMessageSentEvent struct {
 
 func (e DirectMessageSentEvent) EventName() string {
 	return "DirectMessageSentEvent"
+}
+
+type MessagesReadEvent struct {
+	ConversationID string
+	ReaderID       string // The user who read the messages
+	PartnerID      string // The user whose messages were read (to be notified)
+	ReadAt         time.Time
+}
+
+func (e MessagesReadEvent) EventName() string {
+	return "MessagesReadEvent"
 }
 
 // --- Command Handlers ---
@@ -234,6 +255,89 @@ func (h *SendDirectMessageHandler) Handle(ctx context.Context, cmd Command) (int
 	if err := h.eventBus.Publish(ctx, event); err != nil {
 		h.redisClient.Del(ctx, idempotencyKey)
 		return nil, fmt.Errorf("failed to publish direct message sent event: %w", err)
+	}
+
+	return nil, nil
+}
+
+type MarkMessagesReadHandler struct {
+	repo        domain.DirectMessageRepository
+	convRepo    domain.ConversationRepository
+	eventBus    EventBus
+	redisClient *redis.Client
+}
+
+func NewMarkMessagesReadHandler(
+	repo domain.DirectMessageRepository,
+	convRepo domain.ConversationRepository,
+	eventBus EventBus,
+	redisClient *redis.Client,
+) *MarkMessagesReadHandler {
+	return &MarkMessagesReadHandler{
+		repo:        repo,
+		convRepo:    convRepo,
+		eventBus:    eventBus,
+		redisClient: redisClient,
+	}
+}
+
+func (h *MarkMessagesReadHandler) Handle(ctx context.Context, cmd Command) (interface{}, error) {
+	c, ok := cmd.(MarkMessagesReadCommand)
+	if !ok {
+		return nil, fmt.Errorf("invalid command type")
+	}
+
+	// 1. Idempotency Check
+	idempotencyKey := fmt.Sprintf("cmd:%s", c.CommandID)
+	set, err := h.redisClient.SetNX(ctx, idempotencyKey, "processing", 24*time.Hour).Result()
+	if err != nil {
+		return nil, fmt.Errorf("idempotency check failed: %w", err)
+	}
+	if !set {
+		return nil, fmt.Errorf("duplicate command")
+	}
+
+	// 2. Mark as Read
+	if err := h.repo.MarkMessagesAsRead(c.ConversationID, c.UserID); err != nil {
+		h.redisClient.Del(ctx, idempotencyKey)
+		return nil, fmt.Errorf("failed to mark messages as read: %w", err)
+	}
+
+	// 3. Find Partner ID (to notify them)
+	conv, err := h.convRepo.FindByID(c.ConversationID)
+	if err != nil {
+		// Log error but continue? No, if we can't find conversation, something is wrong.
+		// But messages are already marked.
+		// Let's just log and skip notification.
+		// For now, return error to be safe, though partial failure is bad.
+		// But idempotency protects retry.
+		h.redisClient.Del(ctx, idempotencyKey)
+		return nil, fmt.Errorf("failed to find conversation for notification: %w", err)
+	}
+
+	var partnerID string
+	if conv.User1ID == c.UserID {
+		partnerID = conv.User2ID
+	} else {
+		partnerID = conv.User1ID
+	}
+
+	// 4. Create Event
+	event := MessagesReadEvent{
+		ConversationID: c.ConversationID,
+		ReaderID:       c.UserID,
+		PartnerID:      partnerID,
+		ReadAt:         time.Now(),
+	}
+
+	// 5. Publish Event
+	if err := h.eventBus.Publish(ctx, event); err != nil {
+		// Event failed, but DB updated. This is inconsistent.
+		// But we can't rollback DB easily here without transaction manager across services.
+		// For now, we rely on retry or just log.
+		// We delete idempotency key so client can retry.
+		h.redisClient.Del(ctx, idempotencyKey)
+		return nil, fmt.Errorf("failed to publish messages read event: %w", err)
 	}
 
 	return nil, nil

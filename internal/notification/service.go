@@ -56,16 +56,52 @@ func (s *NotificationService) HandleDirectMessageSent(ctx context.Context, event
 
 		// Send to Recipient
 		s.hub.BroadcastToUsers([]string{e.RecipientID}, jsonPayload)
-		
+
 		// Send back to Sender (for multi-device sync and real-time confirmation)
 		// This makes the chat feel "live" even if the sender is on multiple devices or to confirm the server processed it.
 		// Frontend should handle deduplication if it optimistically added the message.
 		s.hub.BroadcastToUsers([]string{e.SenderID}, jsonPayload)
-		
-		logger.Info("Notification sent via WebSocket", 
+
+		logger.Info("Notification sent via WebSocket",
 			zap.String("recipient_id", e.RecipientID),
 			zap.String("sender_id", e.SenderID),
 			zap.String("conversation_id", e.ConversationID))
+	}()
+
+	return nil
+}
+
+// HandleMessagesRead handles the MessagesReadEvent
+func (s *NotificationService) HandleMessagesRead(ctx context.Context, event domain.Event) error {
+	e, ok := event.(service.MessagesReadEvent)
+	if !ok {
+		return nil
+	}
+
+	go func() {
+		payload := map[string]interface{}{
+			"type":            "messages_read",
+			"conversation_id": e.ConversationID,
+			"reader_id":       e.ReaderID,
+			"read_at":         e.ReadAt,
+		}
+
+		jsonPayload, err := json.Marshal(payload)
+		if err != nil {
+			logger.Error("Failed to marshal messages_read payload", zap.Error(err))
+			return
+		}
+
+		// Broadcast to Partner (Client A - The Sender)
+		s.hub.BroadcastToUsers([]string{e.PartnerID}, jsonPayload)
+
+		// Also confirm to Reader (Client B - The Reader) for sync across devices
+		s.hub.BroadcastToUsers([]string{e.ReaderID}, jsonPayload)
+
+		logger.Info("Messages read notification sent",
+			zap.String("conversation_id", e.ConversationID),
+			zap.String("reader_id", e.ReaderID),
+			zap.String("partner_id", e.PartnerID))
 	}()
 
 	return nil

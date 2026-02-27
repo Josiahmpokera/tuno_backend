@@ -22,6 +22,12 @@ type UpdateProfileRequest struct {
 }
 
 func (h *UserHandler) UpdateProfile(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	var req UpdateProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -29,7 +35,7 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	cmd := service.UpdateProfileCommand{
-		UserID:   req.UserID,
+		UserID:   userID,
 		Name:     req.Name,
 		PhotoURL: req.PhotoURL,
 	}

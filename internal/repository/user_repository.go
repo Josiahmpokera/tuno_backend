@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 	"tuno_backend/internal/domain"
 
 	"github.com/jackc/pgx/v5"
@@ -54,20 +55,38 @@ func (r *PostgresUserRepository) Update(user *domain.User) error {
 	return nil
 }
 
+func (r *PostgresUserRepository) UpdatePresence(userID string, isOnline bool) error {
+	query := `
+		UPDATE users
+		SET is_online = $1, last_seen_at = NOW()
+		WHERE id = $2
+	`
+	_, err := r.pool.Exec(context.Background(), query, isOnline, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update user presence: %w", err)
+	}
+	return nil
+}
+
 func (r *PostgresUserRepository) FindByPhoneNumber(phoneNumber string) (*domain.User, error) {
 	query := `
-		SELECT id, phone_number, name, photo_url, created_at, updated_at
+		SELECT id, phone_number, name, photo_url, is_online, last_seen_at, created_at, updated_at
 		FROM users
 		WHERE phone_number = $1
 	`
 	row := r.pool.QueryRow(context.Background(), query, phoneNumber)
 
 	var user domain.User
+	var isOnline *bool
+	var lastSeenAt *time.Time
+
 	err := row.Scan(
 		&user.ID,
 		&user.PhoneNumber,
 		&user.Name,
 		&user.PhotoURL,
+		&isOnline,
+		&lastSeenAt,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -77,23 +96,36 @@ func (r *PostgresUserRepository) FindByPhoneNumber(phoneNumber string) (*domain.
 		}
 		return nil, fmt.Errorf("failed to find user by phone number: %w", err)
 	}
+
+	if isOnline != nil {
+		user.IsOnline = *isOnline
+	}
+	if lastSeenAt != nil {
+		user.LastSeenAt = *lastSeenAt
+	}
+
 	return &user, nil
 }
 
 func (r *PostgresUserRepository) FindByID(id string) (*domain.User, error) {
 	query := `
-		SELECT id, phone_number, name, photo_url, created_at, updated_at
+		SELECT id, phone_number, name, photo_url, is_online, last_seen_at, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
 	row := r.pool.QueryRow(context.Background(), query, id)
 
 	var user domain.User
+	var isOnline *bool
+	var lastSeenAt *time.Time
+
 	err := row.Scan(
 		&user.ID,
 		&user.PhoneNumber,
 		&user.Name,
 		&user.PhotoURL,
+		&isOnline,
+		&lastSeenAt,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -103,5 +135,13 @@ func (r *PostgresUserRepository) FindByID(id string) (*domain.User, error) {
 		}
 		return nil, fmt.Errorf("failed to find user by id: %w", err)
 	}
+
+	if isOnline != nil {
+		user.IsOnline = *isOnline
+	}
+	if lastSeenAt != nil {
+		user.LastSeenAt = *lastSeenAt
+	}
+
 	return &user, nil
 }

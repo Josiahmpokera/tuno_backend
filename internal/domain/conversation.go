@@ -43,4 +43,6 @@ type ConversationRepository interface {
 type DirectMessageRepository interface {
 	Save(message *DirectMessage) error
 	GetByConversationID(conversationID string, limit, offset int) ([]DirectMessage, error)
+	UpdateStatus(messageID string, status string) error
+	MarkMessagesAsRead(conversationID, userID string) error
 }

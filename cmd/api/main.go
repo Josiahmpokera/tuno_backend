@@ -135,6 +135,14 @@ func main() {
 		return nil, fmt.Errorf("invalid command type")
 	})
 
+	markReadHandler := service.NewMarkMessagesReadHandler(dmRepo, conversationRepo, eventBus, redisClient)
+	commandBus.Register("MarkMessagesRead", func(ctx context.Context, cmd interface{}) (interface{}, error) {
+		if c, ok := cmd.(service.Command); ok {
+			return markReadHandler.Handle(ctx, c)
+		}
+		return nil, fmt.Errorf("invalid command type")
+	})
+
 	messageService := service.NewMessageService(groupRepo, messageRepo)
 	commandBus.Register("SendMessageCommand", messageService.SendMessage)
 
@@ -150,13 +158,16 @@ func main() {
 	}
 
 	// Initialize WebSocket Hub
-	hub := websocket.NewHub()
+	hub := websocket.NewHub(userRepo)
 	go hub.Run()
 
 	// Notification Service (WebSocket Glue)
 	notificationService := notification.NewNotificationService(hub)
 	eventBus.Subscribe("DirectMessageSentEvent", func(ctx context.Context, event domain.Event) error {
 		return notificationService.HandleDirectMessageSent(ctx, event)
+	})
+	eventBus.Subscribe("MessagesReadEvent", func(ctx context.Context, event domain.Event) error {
+		return notificationService.HandleMessagesRead(ctx, event)
 	})
 
 	r := gin.New()
@@ -203,6 +214,13 @@ func main() {
 			auth.POST("/verify", authHandler.VerifyOTP)
 		}
 
+		// Protected Auth Routes
+		authProtected := api.Group("/auth")
+		authProtected.Use(middleware.AuthMiddleware(jwtService))
+		{
+			authProtected.POST("/register", authHandler.Register)
+		}
+
 		// User Routes
 		users := api.Group("/users")
 		{
@@ -229,6 +247,7 @@ func main() {
 			conversations.GET("/", conversationHandler.GetConversations)
 			conversations.POST("/:id/messages", conversationHandler.SendMessage)
 			conversations.GET("/:id/messages", conversationHandler.GetMessages)
+			conversations.POST("/:id/read", conversationHandler.MarkMessagesRead)
 		}
 	}
 
