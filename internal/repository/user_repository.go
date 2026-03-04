@@ -107,6 +107,57 @@ func (r *PostgresUserRepository) FindByPhoneNumber(phoneNumber string) (*domain.
 	return &user, nil
 }
 
+func (r *PostgresUserRepository) FindByPhoneNumbers(phoneNumbers []string) ([]domain.User, error) {
+	if len(phoneNumbers) == 0 {
+		return []domain.User{}, nil
+	}
+
+	query := `
+		SELECT id, phone_number, name, photo_url, is_online, last_seen_at, created_at, updated_at
+		FROM users
+		WHERE phone_number = ANY($1)
+	`
+	rows, err := r.pool.Query(context.Background(), query, phoneNumbers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find users by phone numbers: %w", err)
+	}
+	defer rows.Close()
+
+	users := make([]domain.User, 0)
+	for rows.Next() {
+		var user domain.User
+		var isOnline *bool
+		var lastSeenAt *time.Time
+		if err := rows.Scan(
+			&user.ID,
+			&user.PhoneNumber,
+			&user.Name,
+			&user.PhotoURL,
+			&isOnline,
+			&lastSeenAt,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan user row: %w", err)
+		}
+
+		if isOnline != nil {
+			user.IsOnline = *isOnline
+		}
+		if lastSeenAt != nil {
+			user.LastSeenAt = *lastSeenAt
+		}
+
+		users = append(users, user)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	return users, nil
+}
+
 func (r *PostgresUserRepository) FindByID(id string) (*domain.User, error) {
 	query := `
 		SELECT id, phone_number, name, photo_url, is_online, last_seen_at, created_at, updated_at

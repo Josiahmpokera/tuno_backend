@@ -58,6 +58,16 @@ func InitSchema(pool *pgxpool.Pool) error {
 			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(group_id, round_number)
 		);`,
+		`CREATE TABLE IF NOT EXISTS contributions (
+			id UUID PRIMARY KEY,
+			round_id UUID NOT NULL REFERENCES rounds(id),
+			user_id UUID NOT NULL REFERENCES users(id),
+			amount DECIMAL(15, 2) NOT NULL,
+			status VARCHAR(20) NOT NULL,
+			paid_at TIMESTAMP WITH TIME ZONE,
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(round_id, user_id)
+		);`,
 		`CREATE TABLE IF NOT EXISTS conversations (
 			id UUID PRIMARY KEY,
 			user1_id UUID NOT NULL REFERENCES users(id),
@@ -92,6 +102,11 @@ func InitSchema(pool *pgxpool.Pool) error {
 		`ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'SENT';`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT FALSE;`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`,
+		`ALTER TABLE groups ADD COLUMN IF NOT EXISTS description TEXT;`,
+		`ALTER TABLE groups ADD COLUMN IF NOT EXISTS currency VARCHAR(3) DEFAULT 'USD';`,
+		`ALTER TABLE groups ADD COLUMN IF NOT EXISTS is_started BOOLEAN DEFAULT FALSE;`,
+		`ALTER TABLE groups ADD COLUMN IF NOT EXISTS start_date TIMESTAMP WITH TIME ZONE;`,
+		`ALTER TABLE groups ADD COLUMN IF NOT EXISTS total_rounds INT DEFAULT 0;`,
 	}
 
 	for _, query := range alterQueries {

@@ -24,3 +24,18 @@ type GroupCreatedEvent struct {
 func (e GroupCreatedEvent) EventName() string {
 	return "GroupCreatedEvent"
 }
+
+type GroupMemberAddedEvent struct {
+	GroupID    string       `json:"group_id"`
+	MemberID   string       `json:"member_id"`
+	UserID     string       `json:"user_id"`
+	AddedByID  string       `json:"added_by_id"`
+	Role       MemberRole   `json:"role"`
+	Status     MemberStatus `json:"status"`
+	JoinedAt   time.Time    `json:"joined_at"`
+	OccurredAt time.Time    `json:"occurred_at"`
+}
+
+func (e GroupMemberAddedEvent) EventName() string {
+	return "GroupMemberAddedEvent"
+}

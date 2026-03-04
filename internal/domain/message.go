@@ -23,4 +23,5 @@ type Message struct {
 type MessageRepository interface {
 	Save(message *Message) error
 	GetByGroupID(groupID string, limit, offset int) ([]Message, error)
+	GetMessages(groupID string, limit int, before *int64) ([]Message, error)
 }

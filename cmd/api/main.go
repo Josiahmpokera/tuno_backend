@@ -48,6 +48,11 @@ func main() {
 		logger.Fatal("Failed to initialize database schema", zap.Error(err))
 	}
 
+	// Create database indexes for performance
+	if err := db.CreateIndexes(pgPool); err != nil {
+		logger.Fatal("Failed to create database indexes", zap.Error(err))
+	}
+
 	// 4. Connect to Redis
 	redisClient, err := db.NewRedis(cfg.Redis)
 	if err != nil {
@@ -58,7 +63,9 @@ func main() {
 	// 5. Initialize Services & Handlers
 	// Repositories
 	userRepo := repository.NewPostgresUserRepository(pgPool)
-	groupRepo := repository.NewPostgresGroupRepository(pgPool)
+	// Create base group repo and wrap with caching
+	baseGroupRepo := repository.NewPostgresGroupRepository(pgPool)
+	groupRepo := repository.NewCachedGroupRepository(baseGroupRepo, redisClient)
 	messageRepo := repository.NewPostgresMessageRepository(pgPool)
 	conversationRepo := repository.NewPostgresConversationRepository(pgPool)
 	dmRepo := repository.NewPostgresDirectMessageRepository(pgPool)
@@ -74,6 +81,10 @@ func main() {
 	groupCreatedHandler := service.NewGroupCreatedEventHandler(groupRepo)
 	eventBus.Subscribe("GroupCreatedEvent", func(ctx context.Context, event domain.Event) error {
 		return groupCreatedHandler.Handle(ctx, event)
+	})
+	groupMemberAddedHandler := service.NewGroupMemberAddedEventHandler(groupRepo)
+	eventBus.Subscribe("GroupMemberAddedEvent", func(ctx context.Context, event domain.Event) error {
+		return groupMemberAddedHandler.Handle(ctx, event)
 	})
 
 	conversationStartedHandler := service.NewConversationStartedEventHandler(conversationRepo)
@@ -108,6 +119,11 @@ func main() {
 	createGroupHandler := service.NewCreateGroupHandler(eventBus, userRepo, redisClient)
 	commandBus.Register("CreateGroupCommand", func(ctx context.Context, cmd interface{}) (interface{}, error) {
 		return createGroupHandler.Handle(ctx, cmd)
+	})
+
+	addMemberHandler := service.NewAddGroupMemberByPhoneHandler(eventBus, userRepo, groupRepo, redisClient)
+	commandBus.Register("AddGroupMemberByPhoneCommand", func(ctx context.Context, cmd interface{}) (interface{}, error) {
+		return addMemberHandler.Handle(ctx, cmd)
 	})
 
 	startConversationHandler := service.NewStartConversationHandler(conversationRepo, groupRepo, eventBus, redisClient)
@@ -175,6 +191,12 @@ func main() {
 	// Use a custom logger middleware if needed, for now standard is okay
 	r.Use(gin.Logger())
 
+	// Enable CORS for all origins (Network Access)
+	r.Use(middleware.CORSMiddleware())
+
+	// Enable response compression
+	r.Use(middleware.CompressionMiddleware())
+
 	// Routes
 	api := r.Group("/api/v1")
 	{
@@ -226,6 +248,7 @@ func main() {
 		users.Use(middleware.AuthMiddleware(jwtService))
 		{
 			users.GET("/me", userHandler.GetMe)
+			users.POST("/contacts/registered", userHandler.GetRegisteredContacts)
 			users.PUT("/profile", userHandler.UpdateProfile)
 		}
 
@@ -234,11 +257,14 @@ func main() {
 		groups.Use(middleware.AuthMiddleware(jwtService))
 		{
 			groups.POST("/", groupHandler.CreateGroup)
+			groups.POST("/:id/members/by-phone", groupHandler.AddMemberByPhone)
 			groups.GET("/", groupHandler.GetUserGroups)
 			groups.GET("/:id", groupHandler.GetGroupDetails)
 			groups.GET("/:id/members", groupHandler.GetGroupMembers)
 			groups.GET("/:id/messages", groupHandler.GetGroupMessages)
 			groups.POST("/:id/messages", groupHandler.SendMessage)
+			groups.GET("/:id/home", groupHandler.GetGroupHome)
+			groups.GET("/:id/schedule", groupHandler.GetGroupSchedule)
 		}
 
 		// Conversation Routes (Protected)
@@ -254,8 +280,9 @@ func main() {
 	}
 
 	// 7. Start Server
+	// ":PORT" notation binds to all available network interfaces (0.0.0.0)
 	addr := fmt.Sprintf(":%s", cfg.Server.Port)
-	logger.Info("Server listening", zap.String("port", cfg.Server.Port))
+	logger.Info("Server listening on all network interfaces (0.0.0.0)", zap.String("port", cfg.Server.Port))
 
 	if err := r.Run(addr); err != nil {
 		logger.Fatal("Failed to start server", zap.Error(err))

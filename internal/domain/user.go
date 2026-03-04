@@ -20,5 +20,6 @@ type UserRepository interface {
 	Update(user *User) error
 	UpdatePresence(userID string, isOnline bool) error
 	FindByPhoneNumber(phoneNumber string) (*User, error)
+	FindByPhoneNumbers(phoneNumbers []string) ([]User, error)
 	FindByID(id string) (*User, error)
 }
