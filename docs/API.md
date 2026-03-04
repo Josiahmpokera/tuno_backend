@@ -89,6 +89,28 @@ Completes the registration process by setting the user's name and profile pictur
 
 ## 2. User Module
 
+### Get My Profile
+`GET /users/me`
+
+Returns the authenticated user's profile, similar to WhatsApp's personal info view.
+
+**Headers**
+`Authorization: Bearer <token>`
+
+**Response (200 OK)**
+```json
+{
+  "id": "uuid",
+  "phone_number": "+1234567890",
+  "name": "John Doe",
+  "photo_url": "https://example.com/photo.jpg",
+  "is_online": true,
+  "last_seen_at": "2026-03-04T10:00:00Z",
+  "created_at": "2026-03-01T10:00:00Z",
+  "updated_at": "2026-03-04T10:05:00Z"
+}
+```
+
 ### Update Profile
 `PUT /users/profile`
 

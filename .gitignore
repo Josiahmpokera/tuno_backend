@@ -1,7 +1,7 @@
-# Binaries
-tuno_backend
-main
-api
+# Binaries (root-level)
+/tuno_backend
+/main
+/api
 
 # Environment variables
 .env

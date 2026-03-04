@@ -148,7 +148,7 @@ func main() {
 
 	// API Handlers
 	authHandler := handler.NewAuthHandler(commandBus)
-	userHandler := handler.NewUserHandler(commandBus)
+	userHandler := handler.NewUserHandler(commandBus, userRepo)
 	groupHandler := handler.NewGroupHandler(commandBus, groupRepo, messageRepo)
 	conversationHandler := handler.NewConversationHandler(commandBus, conversationRepo, dmRepo)
 
@@ -221,9 +221,11 @@ func main() {
 			authProtected.POST("/register", authHandler.Register)
 		}
 
-		// User Routes
+		// User Routes (Protected)
 		users := api.Group("/users")
+		users.Use(middleware.AuthMiddleware(jwtService))
 		{
+			users.GET("/me", userHandler.GetMe)
 			users.PUT("/profile", userHandler.UpdateProfile)
 		}
 
