@@ -162,10 +162,12 @@ func (r *PostgresGroupRepository) GetGroupDetail(groupID, userID string) (*domai
 		WHERE g.id = $1 AND gm.user_id = $2
 	`
 	var gd domain.GroupDetail
+	var description, photoURL, inviteLink *string
+
 	err := r.pool.QueryRow(ctx, query, groupID, userID).Scan(
-		&gd.ID, &gd.Name, &gd.PhotoURL, &gd.ContributionAmount, &gd.RotationFrequency,
-		&gd.CustomFrequencyDays, &gd.CreatorID, &gd.InviteLink, &gd.CreatedAt, &gd.UpdatedAt,
-		&gd.Description, &gd.Currency, &gd.IsStarted, &gd.StartDate, &gd.TotalRounds,
+		&gd.ID, &gd.Name, &photoURL, &gd.ContributionAmount, &gd.RotationFrequency,
+		&gd.CustomFrequencyDays, &gd.CreatorID, &inviteLink, &gd.CreatedAt, &gd.UpdatedAt,
+		&description, &gd.Currency, &gd.IsStarted, &gd.StartDate, &gd.TotalRounds,
 		&gd.Role,
 		&gd.MembersCount,
 	)
@@ -174,6 +176,17 @@ func (r *PostgresGroupRepository) GetGroupDetail(groupID, userID string) (*domai
 			return nil, fmt.Errorf("group not found or access denied")
 		}
 		return nil, fmt.Errorf("failed to get group detail: %w", err)
+	}
+
+	// Handle NULL values
+	if description != nil {
+		gd.Description = *description
+	}
+	if photoURL != nil {
+		gd.PhotoURL = *photoURL
+	}
+	if inviteLink != nil {
+		gd.InviteLink = *inviteLink
 	}
 
 	// 2. Get Current Round (if any)
@@ -231,16 +244,28 @@ func (r *PostgresGroupRepository) GetGroupsByUserID(userID string) ([]domain.Gro
 		var gr domain.GroupWithRole
 		var msgID, msgContent, msgType, msgSenderID *string
 		var msgCreatedAt *time.Time
+		var description, photoURL, inviteLink *string
 
 		err := rows.Scan(
-			&gr.ID, &gr.Name, &gr.PhotoURL, &gr.ContributionAmount, &gr.RotationFrequency,
-			&gr.CustomFrequencyDays, &gr.CreatorID, &gr.InviteLink, &gr.CreatedAt, &gr.UpdatedAt,
-			&gr.Description, &gr.Currency, &gr.IsStarted, &gr.StartDate, &gr.TotalRounds,
+			&gr.ID, &gr.Name, &photoURL, &gr.ContributionAmount, &gr.RotationFrequency,
+			&gr.CustomFrequencyDays, &gr.CreatorID, &inviteLink, &gr.CreatedAt, &gr.UpdatedAt,
+			&description, &gr.Currency, &gr.IsStarted, &gr.StartDate, &gr.TotalRounds,
 			&gr.Role,
 			&msgID, &msgContent, &msgType, &msgSenderID, &msgCreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan group: %w", err)
+		}
+
+		// Handle NULL values
+		if description != nil {
+			gr.Description = *description
+		}
+		if photoURL != nil {
+			gr.PhotoURL = *photoURL
+		}
+		if inviteLink != nil {
+			gr.InviteLink = *inviteLink
 		}
 
 		if msgID != nil {
